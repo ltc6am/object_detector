@@ -15,8 +15,8 @@ export default async function handler(req, res) {
   if (!image) return res.status(200).json({ status: "Gemini Backend Ready" });
 
   try {
-    // 尝试使用 v1 版本的 API，它有时在区域权限上比 v1beta 更稳定
-    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 采用 v1beta 版本，并明确指向 gemini-1.5-flash，这是目前对多模态支持最广泛的路径
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "Identify objects in this image. Return ONLY a JSON array of objects with 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax]. Use 0-1000 for coordinates. Do not include markdown formatting." },
+            { text: "Identify objects in this image. Return ONLY a JSON array of objects with 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax]. Use 0-1000 for coordinates. Do not include markdown formatting like ```json." },
             { inlineData: { mimeType: "image/png", data: image } }
           ]
         }]
@@ -37,11 +37,15 @@ export default async function handler(req, res) {
     
     // 4. 处理 Google API 返回的错误
     if (data.error) {
-      // 针对地区/权限问题的特殊处理
-      if (data.error.message.includes("location") || data.error.status === "PERMISSION_DENIED") {
-        throw new Error("Region Restriction: Please set Vercel Function Region to 'Washington, D.C. (iad1)' in Project Settings.");
+      const errMsg = data.error.message || "";
+      // 针对截图中的 "User location is not supported" 错误进行拦截提示
+      if (errMsg.includes("location") || data.error.status === "PERMISSION_DENIED") {
+        return res.status(403).json({ 
+          error: "Region Restriction: Google API does not support your current Vercel Server location.",
+          solution: "Please go to Vercel Settings -> Functions -> Function Region and change it to 'Washington, D.C. (iad1)'. Then Redeploy."
+        });
       }
-      throw new Error(data.error.message || "Gemini API returned an error");
+      throw new Error(errMsg || "Gemini API returned an error");
     }
 
     // 5. 提取并清洗 AI 返回的文本
