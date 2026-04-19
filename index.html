@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Object Detector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        #image-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+
+    <div class="max-w-4xl mx-auto px-4 py-12">
+        <header class="text-center mb-12 relative">
+            <h1 class="text-4xl font-extrabold tracking-tight text-slate-900 mb-2">AI Object Detector</h1>
+            <p class="text-slate-600">Identify objects in your images using AI</p>
+            
+            <!-- Hidden Settings for local testing -->
+            <button id="settings-toggle" class="absolute top-0 right-0 p-2 text-slate-300 hover:text-slate-600 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+                </svg>
+            </button>
+        </header>
+
+        <!-- API Config Modal (Local only) -->
+        <div id="settings-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                <h2 class="text-xl font-bold mb-4">API Settings</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Backend URL</label>
+                        <input type="text" id="api-url-input" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="/api/detect">
+                        <p class="text-xs text-slate-500 mt-1">Use <code>/api/detect</code> for your serverless function.</p>
+                    </div>
+                    <div class="flex justify-end pt-4">
+                        <button id="save-settings" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium">Save & Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <main class="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div id="upload-zone" class="p-8 border-2 border-dashed border-slate-200 m-6 rounded-xl transition-colors hover:border-blue-400 cursor-pointer flex flex-col items-center justify-center space-y-4">
+                <input type="file" id="file-input" class="hidden" accept="image/*">
+                <div class="p-4 bg-blue-50 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                </div>
+                <div class="text-center">
+                    <p class="text-lg font-medium">Click to upload or drag and drop</p>
+                    <p class="text-sm text-slate-500">Supports PNG, JPG, WEBP</p>
+                </div>
+            </div>
+
+            <div id="result-section" class="hidden p-6 space-y-6">
+                <div class="flex justify-center">
+                    <div id="image-container">
+                        <img id="preview-img" class="rounded-lg shadow-md max-h-[500px] w-auto" alt="Preview">
+                        <canvas id="detection-canvas"></canvas>
+                    </div>
+                </div>
+
+                <div id="controls" class="flex justify-center space-x-4">
+                    <button id="detect-btn" class="px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">
+                        Detect Objects
+                    </button>
+                    <button id="reset-btn" class="px-6 py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition-colors">
+                        Clear
+                    </button>
+                </div>
+
+                <div id="loading" class="hidden space-y-4 text-center">
+                    <div class="h-4 w-3/4 bg-slate-100 rounded loading-shimmer mx-auto"></div>
+                    <p class="text-sm text-slate-500 animate-pulse">Analyzing image...</p>
+                </div>
+
+                <div id="analysis-results" class="hidden">
+                    <h3 class="text-lg font-bold mb-3 text-slate-800">Detected Objects</h3>
+                    <div class="overflow-x-auto border border-slate-100 rounded-lg">
+                        <table class="min-w-full divide-y divide-slate-200">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Object</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Description</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="error-toast" class="fixed bottom-6 right-6 bg-red-600 text-white px-6 py-3 rounded-lg shadow-2xl transform translate-y-24 transition-transform duration-300">
+        <span id="error-message"></span>
+    </div>
+
+    <script>
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('file-input');
+        const resultSection = document.getElementById('result-section');
+        const previewImg = document.getElementById('preview-img');
+        const canvas = document.getElementById('detection-canvas');
+        const ctx = canvas.getContext('2d');
+        const detectBtn = document.getElementById('detect-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const loading = document.getElementById('loading');
+        const analysisResults = document.getElementById('analysis-results');
+        const resultsBody = document.getElementById('results-body');
+        const errorToast = document.getElementById('error-toast');
+        const errorMessage = document.getElementById('error-message');
+        
+        // Settings UI
+        const settingsToggle = document.getElementById('settings-toggle');
+        const settingsModal = document.getElementById('settings-modal');
+        const apiUrlInput = document.getElementById('api-url-input');
+        const saveSettings = document.getElementById('save-settings');
+
+        let currentBase64 = null;
+        let detectionsCache = [];
+        let config = {
+            apiUrl: localStorage.getItem('detect_api_url') || '/api/detect'
+        };
+
+        apiUrlInput.value = config.apiUrl;
+
+        settingsToggle.onclick = () => settingsModal.classList.toggle('hidden');
+        saveSettings.onclick = () => {
+            config.apiUrl = apiUrlInput.value;
+            localStorage.setItem('detect_api_url', config.apiUrl);
+            settingsModal.classList.add('hidden');
+        };
+
+        uploadZone.onclick = () => fileInput.click();
+        fileInput.onchange = (e) => e.target.files[0] && handleFile(e.target.files[0]);
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentBase64 = e.target.result.split(',')[1];
+                previewImg.src = e.target.result;
+                uploadZone.classList.add('hidden');
+                resultSection.classList.remove('hidden');
+                analysisResults.classList.add('hidden');
+                clearCanvas();
+                previewImg.onload = () => {
+                    canvas.width = previewImg.clientWidth;
+                    canvas.height = previewImg.clientHeight;
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+
+        resetBtn.onclick = () => {
+            fileInput.value = '';
+            uploadZone.classList.remove('hidden');
+            resultSection.classList.add('hidden');
+            currentBase64 = null;
+            detectionsCache = [];
+        };
+
+        function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+        detectBtn.onclick = async () => {
+            if (!currentBase64) return;
+            detectBtn.disabled = true;
+            loading.classList.remove('hidden');
+            analysisResults.classList.add('hidden');
+            clearCanvas();
+
+            try {
+                const response = await fetch(config.apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: currentBase64 })
+                });
+
+                if (!response.ok) throw new Error('API Error');
+                
+                const data = await response.json();
+                detectionsCache = data;
+                displayDetections(data);
+            } catch (err) {
+                showError("Detection failed. Ensure your backend is configured correctly at: " + config.apiUrl);
+            } finally {
+                detectBtn.disabled = false;
+                loading.classList.add('hidden');
+            }
+        };
+
+        function displayDetections(detections) {
+            analysisResults.classList.remove('hidden');
+            resultsBody.innerHTML = '';
+            const imgW = previewImg.clientWidth;
+            const imgH = previewImg.clientHeight;
+
+            detections.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td class="px-4 py-2 font-bold text-blue-600">${item.name}</td><td class="px-4 py-2 text-sm text-slate-600">${item.description}</td>`;
+                resultsBody.appendChild(row);
+
+                if (item.box_2d) {
+                    const [ymin, xmin, ymax, xmax] = item.box_2d;
+                    const left = (xmin / 1000) * imgW, top = (ymin / 1000) * imgH;
+                    const width = ((xmax - xmin) / 1000) * imgW, height = ((ymax - ymin) / 1000) * imgH;
+                    ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 3;
+                    ctx.strokeRect(left, top, width, height);
+                    ctx.fillStyle = '#3b82f6'; ctx.font = 'bold 12px sans-serif';
+                    const labelWidth = ctx.measureText(item.name).width;
+                    ctx.fillRect(left, top - 20, labelWidth + 10, 20);
+                    ctx.fillStyle = 'white'; ctx.fillText(item.name, left + 5, top - 5);
+                }
+            });
+        }
+
+        function showError(msg) {
+            errorMessage.innerText = msg;
+            errorToast.classList.remove('translate-y-24');
+            setTimeout(() => errorToast.classList.add('translate-y-24'), 5000);
+        }
+
+        window.addEventListener('resize', () => {
+            if (previewImg.src) {
+                canvas.width = previewImg.clientWidth;
+                canvas.height = previewImg.clientHeight;
+                if (detectionsCache.length) displayDetections(detectionsCache);
+            }
+        });
+    </script>
+</body>
+</html>
