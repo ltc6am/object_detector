@@ -26,10 +26,13 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "Identify objects in this image. Return ONLY a JSON array of objects with 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax]. Use 0-1000 for coordinates. Do not include markdown formatting like ```json." },
+            { text: "Identify objects in this image. Return a JSON array of objects. Each object must have 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax] using 0-1000 scale. Return ONLY the JSON." },
             { inlineData: { mimeType: "image/png", data: image } }
           ]
-        }]
+        }],
+        generationConfig: {
+          response_mime_type: "application/json"
+        }
       })
     });
 
@@ -52,16 +55,22 @@ export default async function handler(req, res) {
     // 5. 提取并清洗 AI 返回的文本
     let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
     
-    // 移除可能存在的 Markdown 代码块标记
-    resultText = resultText.replace(/```json/g, "").replace(/```/g, "").trim();
+    // 鲁棒的清理逻辑：通过正则匹配提取第一个 [ 到最后一个 ] 之间的内容
+    const jsonMatch = resultText.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      resultText = jsonMatch[0];
+    }
 
     // 6. 尝试解析 JSON 并返回
     try {
       const parsedData = JSON.parse(resultText);
       res.status(200).json(parsedData);
     } catch (parseError) {
-      console.error("JSON Parse Error. Raw text:", resultText);
-      res.status(500).json({ error: "AI returned invalid JSON format. Please try again." });
+      console.error("Failed to parse JSON. Raw output:", resultText);
+      res.status(500).json({ 
+        error: "AI Response Parsing Failed",
+        details: "The AI did not return a valid JSON array. Check Vercel logs for raw output."
+      });
     }
 
   } catch (error) {
