@@ -35,7 +35,6 @@
             <h1 class="text-4xl font-extrabold tracking-tight text-slate-900 mb-2">AI Object Detector</h1>
             <p class="text-slate-600">Identify objects in your images using AI</p>
             
-            <!-- Hidden Settings for local testing -->
             <button id="settings-toggle" class="absolute top-0 right-0 p-2 text-slate-300 hover:text-slate-600 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
@@ -43,7 +42,6 @@
             </button>
         </header>
 
-        <!-- API Config Modal (Local only) -->
         <div id="settings-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
                 <h2 class="text-xl font-bold mb-4">API Settings</h2>
@@ -114,8 +112,11 @@
         </main>
     </div>
 
-    <div id="error-toast" class="fixed bottom-6 right-6 bg-red-600 text-white px-6 py-3 rounded-lg shadow-2xl transform translate-y-24 transition-transform duration-300">
-        <span id="error-message"></span>
+    <div id="error-toast" class="fixed bottom-6 right-6 bg-red-600 text-white px-6 py-3 rounded-lg shadow-2xl transform translate-y-32 transition-transform duration-300 max-w-sm">
+        <div class="flex flex-col">
+            <span class="font-bold">Error</span>
+            <span id="error-message" class="text-sm opacity-90"></span>
+        </div>
     </div>
 
     <script>
@@ -133,7 +134,6 @@
         const errorToast = document.getElementById('error-toast');
         const errorMessage = document.getElementById('error-message');
         
-        // Settings UI
         const settingsToggle = document.getElementById('settings-toggle');
         const settingsModal = document.getElementById('settings-modal');
         const apiUrlInput = document.getElementById('api-url-input');
@@ -198,13 +198,17 @@
                     body: JSON.stringify({ image: currentBase64 })
                 });
 
-                if (!response.ok) throw new Error('API Error');
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server returned ${response.status}: ${errorText || 'Unknown error'}`);
+                }
                 
                 const data = await response.json();
                 detectionsCache = data;
                 displayDetections(data);
             } catch (err) {
-                showError("Detection failed. Ensure your backend is configured correctly at: " + config.apiUrl);
+                console.error(err);
+                showError(err.message);
             } finally {
                 detectBtn.disabled = false;
                 loading.classList.add('hidden');
@@ -238,8 +242,8 @@
 
         function showError(msg) {
             errorMessage.innerText = msg;
-            errorToast.classList.remove('translate-y-24');
-            setTimeout(() => errorToast.classList.add('translate-y-24'), 5000);
+            errorToast.classList.remove('translate-y-32');
+            setTimeout(() => errorToast.classList.add('translate-y-32'), 8000);
         }
 
         window.addEventListener('resize', () => {
