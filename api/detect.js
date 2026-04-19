@@ -15,8 +15,8 @@ export default async function handler(req, res) {
   if (!image) return res.status(200).json({ status: "Gemini Backend Ready" });
 
   try {
-    // 使用 Gemini 1.5 Flash，它在免费层级有较好的 Vision 支持
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 修复：将模型名更新为更具体的 'gemini-1.5-flash-latest' 以确保 v1beta 路径兼容性
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -37,6 +37,10 @@ export default async function handler(req, res) {
     
     // 4. 处理 Google API 返回的错误
     if (data.error) {
+      // 针对 "model not found" 错误提供更清晰的提示
+      if (data.error.status === "NOT_FOUND") {
+        throw new Error("Model path issue. Tried gemini-1.5-flash-latest but it failed. Please check your API key region permissions.");
+      }
       throw new Error(data.error.message || "Gemini API returned an error");
     }
 
