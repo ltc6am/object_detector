@@ -12,11 +12,11 @@ export default async function handler(req, res) {
   const { image } = req.body;
 
   // 3. 用于测试连接的响应
-  if (!image) return res.status(200).json({ status: "Gemini Backend Ready" });
+  if (!image) return res.status(200).json({ status: "Gemini 2.0 Backend Ready" });
 
   try {
-    // 采用标准的 v1beta 路径。如果遇到 "not found"，尝试将模型名锁定为 gemini-1.5-flash
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 使用最新的 Gemini 2.0 Flash 模型
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -39,15 +39,6 @@ export default async function handler(req, res) {
     if (data.error) {
       const errMsg = data.error.message || "";
       
-      // 针对 "not found" 错误的额外排查提示
-      if (data.error.status === "NOT_FOUND" || errMsg.includes("not found")) {
-        return res.status(500).json({
-          error: "Model Not Found",
-          details: errMsg,
-          suggestion: "Try changing the model name to 'gemini-1.5-flash-latest' or 'gemini-1.5-pro' in api/detect.js"
-        });
-      }
-
       // 针对地区/位置错误的拦截
       if (errMsg.includes("location") || data.error.status === "PERMISSION_DENIED") {
         return res.status(403).json({ 
@@ -61,7 +52,7 @@ export default async function handler(req, res) {
     // 5. 提取并清洗 AI 返回的文本
     let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
     
-    // 鲁棒的清理逻辑：移除所有的 Markdown 代码块标记
+    // 移除可能存在的 Markdown 代码块标记
     resultText = resultText.replace(/```json/g, "").replace(/```/g, "").trim();
 
     // 6. 尝试解析 JSON 并返回
