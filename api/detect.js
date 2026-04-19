@@ -11,11 +11,13 @@ export default async function handler(req, res) {
   const { image } = req.body;
   
   // 基础连接测试
-  if (!image) return res.status(200).json({ status: "Gemini 2.0 Flash (Paid Tier) Ready" });
+  if (!image) return res.status(200).json({ status: "Gemini Backend Ready" });
 
   try {
-    // 使用付费账户支持最好的 gemini-2.0-flash 模型
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    // 使用兼容性最强的模型名称标识符
+    // 如果 gemini-2.0-flash 提示找不到，gemini-1.5-flash 是最稳妥的替代方案
+    const modelName = "gemini-1.5-flash";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -25,13 +27,13 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "Identify objects in this image. Return a JSON array of objects. Each object must have 'name' (string), 'description' (string), and 'box_2d' (array [ymin, xmin, ymax, xmax] using 0-1000 scale). Return ONLY the raw JSON array, no extra text." },
+            { text: "Identify objects in this image. Return a JSON array of objects. Each object must have 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax] using 0-1000 scale. Return ONLY the raw JSON array." },
             { inlineData: { mimeType: "image/png", data: image } }
           ]
         }],
         generationConfig: {
           response_mime_type: "application/json",
-          temperature: 0.2
+          temperature: 0.1
         }
       })
     });
@@ -44,14 +46,14 @@ export default async function handler(req, res) {
       return res.status(data.error.code || 500).json({ 
         error: "Gemini API Error", 
         message: data.error.message,
-        status: data.error.status 
+        details: data.error.status
       });
     }
 
     // 4. 解析结果
     let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
     
-    // 鲁棒性清理：移除可能存在的 Markdown 标签
+    // 移除可能存在的 Markdown 标签
     resultText = resultText.replace(/```json/g, "").replace(/```/g, "").trim();
 
     try {
@@ -59,7 +61,7 @@ export default async function handler(req, res) {
       res.status(200).json(parsedData);
     } catch (parseError) {
       console.error("JSON Parsing failed. Raw text:", resultText);
-      res.status(500).json({ error: "Failed to parse AI response as JSON. The AI might have returned non-JSON text." });
+      res.status(500).json({ error: "Failed to parse AI response as JSON." });
     }
 
   } catch (error) {
