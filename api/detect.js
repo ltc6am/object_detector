@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   if (!image) return res.status(200).json({ status: "Gemini Backend Ready" });
 
   try {
-    // 采用 v1beta 版本，并明确指向 gemini-1.5-flash，这是目前对多模态支持最广泛的路径
+    // 采用标准的 v1beta 路径。如果遇到 "not found"，尝试将模型名锁定为 gemini-1.5-flash
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
@@ -38,7 +38,17 @@ export default async function handler(req, res) {
     // 4. 处理 Google API 返回的错误
     if (data.error) {
       const errMsg = data.error.message || "";
-      // 针对截图中的 "User location is not supported" 错误进行拦截提示
+      
+      // 针对 "not found" 错误的额外排查提示
+      if (data.error.status === "NOT_FOUND" || errMsg.includes("not found")) {
+        return res.status(500).json({
+          error: "Model Not Found",
+          details: errMsg,
+          suggestion: "Try changing the model name to 'gemini-1.5-flash-latest' or 'gemini-1.5-pro' in api/detect.js"
+        });
+      }
+
+      // 针对地区/位置错误的拦截
       if (errMsg.includes("location") || data.error.status === "PERMISSION_DENIED") {
         return res.status(403).json({ 
           error: "Region Restriction: Google API does not support your current Vercel Server location.",
@@ -51,7 +61,7 @@ export default async function handler(req, res) {
     // 5. 提取并清洗 AI 返回的文本
     let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
     
-    // 移除可能存在的 Markdown 代码块标记
+    // 鲁棒的清理逻辑：移除所有的 Markdown 代码块标记
     resultText = resultText.replace(/```json/g, "").replace(/```/g, "").trim();
 
     // 6. 尝试解析 JSON 并返回
