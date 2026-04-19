@@ -4,77 +4,66 @@ export default async function handler(req, res) {
   
   // 2. 获取 API Key
   const apiKey = process.env.GEMINI_API_KEY;
-  
   if (!apiKey) {
     return res.status(500).json({ error: "GEMINI_API_KEY is missing in Vercel environment variables." });
   }
 
   const { image } = req.body;
-
-  // 3. 用于测试连接的响应
-  if (!image) return res.status(200).json({ status: "Gemini 2.0 Backend Ready" });
+  
+  // 基础连接测试
+  if (!image) return res.status(200).json({ status: "Gemini 2.0 Flash (Paid Tier) Ready" });
 
   try {
-    // 使用最新的 Gemini 2.0 Flash 模型
+    // 使用付费账户支持最好的 gemini-2.0-flash 模型
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "Identify objects in this image. Return a JSON array of objects. Each object must have 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax] using 0-1000 scale. Return ONLY the JSON." },
+            { text: "Identify objects in this image. Return a JSON array of objects. Each object must have 'name' (string), 'description' (string), and 'box_2d' (array [ymin, xmin, ymax, xmax] using 0-1000 scale). Return ONLY the raw JSON array, no extra text." },
             { inlineData: { mimeType: "image/png", data: image } }
           ]
         }],
         generationConfig: {
-          response_mime_type: "application/json"
+          response_mime_type: "application/json",
+          temperature: 0.2
         }
       })
     });
 
     const data = await response.json();
     
-    // 4. 处理 Google API 返回的错误
+    // 3. 处理错误响应
     if (data.error) {
-      const errMsg = data.error.message || "";
-      
-      // 针对地区/位置错误的拦截
-      if (errMsg.includes("location") || data.error.status === "PERMISSION_DENIED") {
-        return res.status(403).json({ 
-          error: "Region Restriction: Google API does not support your current Vercel Server location.",
-          solution: "Please go to Vercel Settings -> Functions -> Function Region and change it to 'Washington, D.C. (iad1)'. Then Redeploy."
-        });
-      }
-      throw new Error(errMsg || "Gemini API returned an error");
+      console.error("Google API Error:", data.error);
+      return res.status(data.error.code || 500).json({ 
+        error: "Gemini API Error", 
+        message: data.error.message,
+        status: data.error.status 
+      });
     }
 
-    // 5. 提取并清洗 AI 返回的文本
+    // 4. 解析结果
     let resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
     
-    // 鲁棒的清理逻辑：通过正则匹配提取第一个 [ 到最后一个 ] 之间的内容
-    const jsonMatch = resultText.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      resultText = jsonMatch[0];
-    }
+    // 鲁棒性清理：移除可能存在的 Markdown 标签
+    resultText = resultText.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    // 6. 尝试解析 JSON 并返回
     try {
       const parsedData = JSON.parse(resultText);
       res.status(200).json(parsedData);
     } catch (parseError) {
-      console.error("Failed to parse JSON. Raw output:", resultText);
-      res.status(500).json({ 
-        error: "AI Response Parsing Failed",
-        details: "The AI did not return a valid JSON array. Check Vercel logs for raw output."
-      });
+      console.error("JSON Parsing failed. Raw text:", resultText);
+      res.status(500).json({ error: "Failed to parse AI response as JSON. The AI might have returned non-JSON text." });
     }
 
   } catch (error) {
-    console.error("Backend processing error:", error);
-    res.status(500).json({ error: "Gemini Processing Failed: " + error.message });
+    console.error("Critical Server Error:", error);
+    res.status(500).json({ error: "Internal Server Error: " + error.message });
   }
 }
