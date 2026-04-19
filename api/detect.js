@@ -1,64 +1,43 @@
-// Step 1: Capture image from webpage (e.g., from canvas or file input)
-async function detectObjectInWebpage(imageElement, targetObject) {
-    // Convert image to base64
-    const canvas = document.createElement('canvas');
-    canvas.width = imageElement.width;
-    canvas.height = imageElement.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imageElement, 0, 0);
-    const base64Image = canvas.toDataURL('image/jpeg').split(',')[1];
-    
-    // Step 2: Call DeepSeek API
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer YOUR_DEEPSEEK_API_KEY'
-        },
-        body: JSON.stringify({
-            model: 'deepseek-vl2',  // Vision-language model
-            messages: [{
-                role: 'user',
-                content: [
-                    {
-                        type: 'text',
-                        text: `Detect ${targetObject} in this image. Return bounding box coordinates in format [[x1,y1,x2,y2]].`
-                    },
-                    {
-                        type: 'image_url',
-                        image_url: {
-                            url: `data:image/jpeg;base64,${base64Image}`
-                        }
-                    }
-                ]
-            }]
-        })
-    });
-    
-    const data = await response.json();
-    // Parse coordinates from response (format: <|det|>[[x1,y1,x2,y2]]<|/det|>)
-    return parseCoordinates(data.choices[0].message.content);
-}
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  
+  // 请确保在 Vercel 中把 GEMINI_API_KEY 换成你的 DeepSeek Key
+  // 或者新建一个环境变量叫 DEEPSEEK_API_KEY
+  const apiKey = process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY;
+  const { image } = req.body;
 
-// Step 3: Draw detection boxes on webpage
-function drawBoundingBoxes(coordinates, imageElement, originalWidth, originalHeight) {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = originalWidth;
-    canvas.height = originalHeight;
-    ctx.drawImage(imageElement, 0, 0);
-    
-    coordinates.forEach(coord => {
-        // Convert normalized coordinates (0-999) to pixels
-        const x1 = (coord[0] / 999) * originalWidth;
-        const y1 = (coord[1] / 999) * originalHeight;
-        const x2 = (coord[2] / 999) * originalWidth;
-        const y2 = (coord[3] / 999) * originalHeight;
-        
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  if (!image) return res.status(200).json({ status: "DeepSeek Backend Ready" });
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat", // 或者 deepseek-reasoner
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Identify objects in this image. Return ONLY a JSON array of objects with 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax]. Use 0-1000 for coordinates." },
+              { type: "image_url", image_url: { url: `data:image/png;base64,${image}` } }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" }
+      })
     });
+
+    const data = await response.json();
     
-    return canvas;
+    if (data.error) throw new Error(data.error.message);
+
+    const resultText = data.choices[0].message.content;
+    res.status(200).json(JSON.parse(resultText));
+
+  } catch (error) {
+    res.status(500).json({ error: "DeepSeek Processing Failed: " + error.message });
+  }
 }
