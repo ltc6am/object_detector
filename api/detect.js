@@ -2,7 +2,7 @@ export default async function handler(req, res) {
   // 1. 仅允许 POST 请求
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
-  // 2. 获取 API Key (优先使用 GEMINI_API_KEY)
+  // 2. 获取 API Key
   const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
@@ -15,8 +15,8 @@ export default async function handler(req, res) {
   if (!image) return res.status(200).json({ status: "Gemini Backend Ready" });
 
   try {
-    // 修复：将模型名更新为更具体的 'gemini-1.5-flash-latest' 以确保 v1beta 路径兼容性
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    // 尝试使用 v1 版本的 API，它有时在区域权限上比 v1beta 更稳定
+    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: "Identify objects in this image. Return ONLY a JSON array of objects with 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax]. Use 0-1000 for coordinates. Do not include markdown formatting like ```json." },
+            { text: "Identify objects in this image. Return ONLY a JSON array of objects with 'name', 'description', and 'box_2d' [ymin, xmin, ymax, xmax]. Use 0-1000 for coordinates. Do not include markdown formatting." },
             { inlineData: { mimeType: "image/png", data: image } }
           ]
         }]
@@ -37,9 +37,9 @@ export default async function handler(req, res) {
     
     // 4. 处理 Google API 返回的错误
     if (data.error) {
-      // 针对 "model not found" 错误提供更清晰的提示
-      if (data.error.status === "NOT_FOUND") {
-        throw new Error("Model path issue. Tried gemini-1.5-flash-latest but it failed. Please check your API key region permissions.");
+      // 针对地区/权限问题的特殊处理
+      if (data.error.message.includes("location") || data.error.status === "PERMISSION_DENIED") {
+        throw new Error("Region Restriction: Please set Vercel Function Region to 'Washington, D.C. (iad1)' in Project Settings.");
       }
       throw new Error(data.error.message || "Gemini API returned an error");
     }
