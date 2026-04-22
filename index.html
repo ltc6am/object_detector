@@ -3,256 +3,708 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Object Detector</title>
+    <title>AI Detective: Professional Training (V22)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        .loading-shimmer {
-            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
+        body { font-family: 'Inter', sans-serif; background-color: #020617; color: #f8fafc; overflow-x: hidden; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .module-card { background: #1e293b; border: 2px solid #334155; transition: all 0.2s ease; min-width: 160px; }
+        .module-card.active { border-color: #10b981; background: #0f172a; box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
+        .module-card.locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.8); }
+        .pixel-cell { transition: all 0.1s ease; cursor: crosshair; position: relative; }
+        .pixel-cell:hover { transform: scale(1.1); outline: 2px solid #10b981; z-index: 10; }
+        .try-dot { width: 8px; height: 8px; border-radius: 50%; background: #334155; }
+        .try-dot.used { background-color: #ef4444; box-shadow: 0 0 5px #ef4444; }
+        
+        .correct-reveal { 
+            outline: 4px solid #10b981 !important; 
+            outline-offset: 2px; 
+            z-index: 50; 
+            position: relative; 
+            box-shadow: 0 0 25px #10b981 !important;
+            transform: scale(1.15);
         }
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
+
+        .noise-overlay { position: relative; }
+        .noise-overlay::after {
+            content: ""; position: absolute; inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            opacity: 0.15; pointer-events: none; border-radius: inherit;
         }
-        #image-container {
-            position: relative;
-            display: inline-block;
-            max-width: 100%;
+
+        @keyframes pulse-emerald {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            pointer-events: none;
+        .active-pulse { animation: pulse-emerald 2s infinite; }
+        
+        .library-scroll { 
+            scrollbar-width: thin; 
+            scrollbar-color: #10b981 #0f172a; 
+            overflow-y: auto;
         }
+        .library-scroll::-webkit-scrollbar { width: 6px; }
+        .library-scroll::-webkit-scrollbar-track { background: #0f172a; }
+        .library-scroll::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+
+        .choice-btn { transition: all 0.2s ease; }
+        .choice-btn.correct-choice { border-color: #10b981 !important; background-color: rgba(16, 185, 129, 0.15) !important; color: #10b981 !important; }
+        .choice-btn.wrong-choice { border-color: #ef4444 !important; opacity: 0.5; }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans text-slate-900">
+<body class="min-h-screen flex flex-col">
 
-    <div class="max-w-4xl mx-auto px-4 py-12">
-        <header class="text-center mb-12 relative">
-            <h1 class="text-4xl font-extrabold tracking-tight text-slate-900 mb-2">AI Object Detector</h1>
-            <p class="text-slate-600">Identify objects in your images using AI</p>
-            
-            <button id="settings-toggle" class="absolute top-0 right-0 p-2 text-slate-300 hover:text-slate-600 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
-                </svg>
-            </button>
-        </header>
+    <header class="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <div class="bg-emerald-500 p-2 rounded-xl cursor-pointer hover:rotate-12 transition-transform" onclick="showAdminPrompt()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tighter text-white uppercase italic">AI Detective <span class="text-emerald-500">Pro V22</span></h1>
+                    <p class="text-[10px] text-slate-500 font-bold tracking-[0.2em]">HK_CS_CURRICULUM_FINAL_BUILD</p>
+                </div>
+            </div>
+            <div id="timer" class="mono text-emerald-400 bg-slate-950 px-4 py-2 rounded-lg border border-slate-800 shadow-inner">00:00</div>
+        </div>
+    </header>
 
-        <div id="settings-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
-                <h2 class="text-xl font-bold mb-4">API Settings</h2>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Backend URL</label>
-                        <input type="text" id="api-url-input" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="/api/detect">
-                        <p class="text-xs text-slate-500 mt-1">Use <code>/api/detect</code> for your serverless function.</p>
+    <nav class="bg-slate-900/50 border-b border-slate-800 p-2 overflow-x-auto">
+        <div id="module-menu" class="max-w-7xl mx-auto flex gap-3 px-4">
+            <!-- Modules injected here -->
+        </div>
+    </nav>
+
+    <main class="flex-1 max-w-6xl mx-auto w-full p-4 md:p-8">
+        <div id="game-screen" class="bg-slate-900 rounded-[2.5rem] border border-slate-800 p-4 md:p-10 shadow-2xl min-h-[650px] relative flex flex-col">
+            <div id="screen-content" class="h-full flex flex-col items-center">
+                <!-- Dynamic Content -->
+            </div>
+
+            <!-- Intro Briefing Modal -->
+            <div id="intro-modal" class="hidden absolute inset-0 z-[150] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-6">
+                <div class="bg-slate-900 border-2 border-emerald-500/50 p-8 rounded-[2rem] max-w-xl w-full shadow-2xl">
+                    <div class="flex items-center gap-4 mb-4">
+                        <div id="intro-icon" class="text-4xl bg-emerald-500/10 p-3 rounded-2xl">🔍</div>
+                        <h2 id="intro-title" class="text-3xl font-black text-white italic">Briefing</h2>
                     </div>
-                    <div class="flex justify-end pt-4">
-                        <button id="save-settings" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium">Save & Close</button>
+                    <div class="mb-4 bg-slate-800/50 p-4 rounded-xl border border-slate-700">
+                        <h4 class="text-[10px] font-bold text-emerald-400 uppercase mb-1 italic">Knowledge Concept</h4>
+                        <p id="intro-concept-text" class="text-slate-300 text-sm"></p>
+                    </div>
+                    <div class="mb-8">
+                        <h4 class="text-[10px] font-bold text-slate-500 uppercase mb-1 italic">Instructions</h4>
+                        <p id="intro-instruction-text" class="text-slate-200 text-lg font-medium"></p>
+                    </div>
+                    <button onclick="dismissIntro()" class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-4 rounded-xl transition-all uppercase tracking-widest active-pulse">Accept Mission</button>
+                </div>
+            </div>
+
+            <!-- Label Prompt Modal -->
+            <div id="label-modal" class="hidden absolute inset-0 z-[180] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6">
+                <div class="bg-slate-900 border-2 border-emerald-500 p-8 rounded-3xl max-w-sm w-full text-center">
+                    <h3 class="text-xl font-bold mb-2 text-white italic">Evidence Found!</h3>
+                    <p class="text-slate-400 mb-1 text-sm italic">Label this object using the word list:</p>
+                    <div id="label-tries-display" class="text-[10px] text-rose-500 font-bold mb-3 uppercase">Attempts Remaining: 3</div>
+                    <input type="text" id="label-input" class="w-full bg-slate-800 border-2 border-slate-700 p-4 rounded-xl mb-4 text-white font-bold outline-none focus:border-emerald-500 uppercase" placeholder="TYPE LABEL...">
+                    <button id="label-submit-btn" class="w-full bg-emerald-500 text-slate-950 font-black py-3 rounded-xl hover:bg-emerald-400 transition-colors">CONFIRM LABEL</button>
+                </div>
+            </div>
+
+            <!-- Message Overlay -->
+            <div id="msg-overlay" class="hidden absolute inset-0 z-[100] bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-6">
+                <div class="bg-slate-900 border-2 border-emerald-500 p-10 rounded-[2rem] max-w-md w-full text-center shadow-2xl">
+                    <div id="msg-icon" class="text-6xl mb-6">✅</div>
+                    <h3 id="msg-title" class="text-2xl font-bold mb-4 text-white italic"></h3>
+                    <p id="msg-text" class="text-slate-400 mb-8"></p>
+                    <button id="msg-btn" class="w-full bg-emerald-500 text-slate-950 font-black py-4 rounded-xl hover:bg-emerald-400 transition-colors uppercase tracking-widest">Acknowledge</button>
+                </div>
+            </div>
+
+            <!-- Admin Overlay -->
+            <div id="admin-overlay" class="hidden absolute inset-0 z-[200] bg-slate-950/95 flex items-center justify-center p-6">
+                <div class="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-sm shadow-2xl">
+                    <h3 class="mono text-emerald-500 text-sm mb-4 uppercase tracking-tighter">Teacher Bypass Terminal</h3>
+                    <input type="password" id="admin-pass" placeholder="Enter Access Key..." class="w-full bg-slate-800 border border-slate-700 p-4 rounded-xl mb-4 text-white mono outline-none focus:border-emerald-500">
+                    <div class="flex gap-3">
+                        <button onclick="checkAdmin()" class="flex-1 bg-emerald-600 text-white font-bold py-3 rounded-xl">EXECUTE</button>
+                        <button onclick="closeAdmin()" class="flex-1 bg-slate-700 text-white font-bold py-3 rounded-xl">CANCEL</button>
                     </div>
                 </div>
             </div>
         </div>
-
-        <main class="bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div id="upload-zone" class="p-8 border-2 border-dashed border-slate-200 m-6 rounded-xl transition-colors hover:border-blue-400 cursor-pointer flex flex-col items-center justify-center space-y-4">
-                <input type="file" id="file-input" class="hidden" accept="image/*">
-                <div class="p-4 bg-blue-50 rounded-full">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                </div>
-                <div class="text-center">
-                    <p class="text-lg font-medium">Click to upload or drag and drop</p>
-                    <p class="text-sm text-slate-500">Supports PNG, JPG, WEBP</p>
-                </div>
-            </div>
-
-            <div id="result-section" class="hidden p-6 space-y-6">
-                <div class="flex justify-center">
-                    <div id="image-container">
-                        <img id="preview-img" class="rounded-lg shadow-md max-h-[500px] w-auto" alt="Preview">
-                        <canvas id="detection-canvas"></canvas>
-                    </div>
-                </div>
-
-                <div id="controls" class="flex justify-center space-x-4">
-                    <button id="detect-btn" class="px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">
-                        Detect Objects
-                    </button>
-                    <button id="reset-btn" class="px-6 py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition-colors">
-                        Clear
-                    </button>
-                </div>
-
-                <div id="loading" class="hidden space-y-4 text-center">
-                    <div class="h-4 w-3/4 bg-slate-100 rounded loading-shimmer mx-auto"></div>
-                    <p class="text-sm text-slate-500 animate-pulse">Analyzing image...</p>
-                </div>
-
-                <div id="analysis-results" class="hidden">
-                    <h3 class="text-lg font-bold mb-3 text-slate-800">Detected Objects</h3>
-                    <div class="overflow-x-auto border border-slate-100 rounded-lg">
-                        <table class="min-w-full divide-y divide-slate-200">
-                            <thead class="bg-slate-50">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Object</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Description</th>
-                                </tr>
-                            </thead>
-                            <tbody id="results-body" class="divide-y divide-slate-100"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <div id="error-toast" class="fixed bottom-6 right-6 bg-red-600 text-white px-6 py-3 rounded-lg shadow-2xl transform translate-y-32 transition-transform duration-300 max-w-sm">
-        <div class="flex flex-col">
-            <span class="font-bold">Error</span>
-            <span id="error-message" class="text-sm opacity-90"></span>
-        </div>
-    </div>
+    </main>
 
     <script>
-        const uploadZone = document.getElementById('upload-zone');
-        const fileInput = document.getElementById('file-input');
-        const resultSection = document.getElementById('result-section');
-        const previewImg = document.getElementById('preview-img');
-        const canvas = document.getElementById('detection-canvas');
-        const ctx = canvas.getContext('2d');
-        const detectBtn = document.getElementById('detect-btn');
-        const resetBtn = document.getElementById('reset-btn');
-        const loading = document.getElementById('loading');
-        const analysisResults = document.getElementById('analysis-results');
-        const resultsBody = document.getElementById('results-body');
-        const errorToast = document.getElementById('error-toast');
-        const errorMessage = document.getElementById('error-message');
-        
-        const settingsToggle = document.getElementById('settings-toggle');
-        const settingsModal = document.getElementById('settings-modal');
-        const apiUrlInput = document.getElementById('api-url-input');
-        const saveSettings = document.getElementById('save-settings');
-
-        let currentBase64 = null;
-        let detectionsCache = [];
-        let config = {
-            apiUrl: localStorage.getItem('detect_api_url') || '/api/detect'
+        const state = {
+            modules: [
+                { 
+                    id: 0, name: "RGB Forensics", icon: "🎨", marks: 0, target: 20, completed: false, locked: false, attemptsThisRound: 0, maxRoundAttempts: 100,
+                    concept: "Computers represent color as numeric data (RGB). Higher pixel density makes forensic extraction more difficult.",
+                    instruction: "Identify the signal signature that matches the target RGB coordinates."
+                },
+                { 
+                    id: 1, name: "Classification", icon: "🎯", marks: 0, target: 20, completed: false, locked: true, currentLevel: 0, totalLevels: 50,
+                    concept: "Image Classification groups data into categories based on specific visual features.",
+                    instruction: "You are a detective interrogating a suspect. Analyze their emotions to find clues."
+                },
+                { 
+                    id: 2, name: "Detection", icon: "🔎", marks: 0, target: 20, completed: false, locked: true, currentLevel: 0, totalLevels: 50,
+                    concept: "Detection identifies 'Where' objects are. Each found object must be precisely labeled to train the AI model.",
+                    instruction: "Identify and label all signal sources in the room to secure the scene."
+                },
+                { 
+                    id: 3, name: "Potentials & Limits", icon: "⚖️", marks: 0, target: 10, completed: false, locked: true, currentLevel: 0, totalLevels: 20,
+                    concept: "AI vision has high potential (Benefits) but also technical boundaries (Limitations).",
+                    instruction: "Review the evidence case study and identify the curriculum category that best describes the scenario."
+                }
+            ],
+            currentModuleIdx: 0,
+            rgbTries: 0,
+            startTime: Date.now(),
+            detectionAttempts: 0,
+            detectionSubCount: 0,
+            detectionRoundFailed: false,
+            isTransitioning: false,
+            limitationsAnswered: false
         };
 
-        apiUrlInput.value = config.apiUrl;
+        const allPotentialLimits = [
+            "Increase Automation & Efficiency", 
+            "Enhance Safety & Convenience", 
+            "Secure Personalization", 
+            "Data Dependency & Bias", 
+            "Environmental Sensitivity", 
+            "Lack of Human Context"
+        ];
 
-        settingsToggle.onclick = () => settingsModal.classList.toggle('hidden');
-        saveSettings.onclick = () => {
-            config.apiUrl = apiUrlInput.value;
-            localStorage.setItem('detect_api_url', config.apiUrl);
-            settingsModal.classList.add('hidden');
-        };
+        const chartData = [
+            { img: "😀", name: "GRINNING" }, { img: "😄", name: "SMILE" }, { img: "😃", name: "SMILEY" }, { img: "😬", name: "GRIMACING" }, { img: "😁", name: "GRIN" },
+            { img: "😌", name: "RELIEVED" }, { img: "😊", name: "RELAXED" }, { img: "😊", name: "BLUSH" }, { img: "🙂", name: "SLIGHTLY SMILE FACE" }, { img: "😉", name: "WINK" },
+            { img: "😇", name: "INNOCENT" }, { img: "😆", name: "LAUGHING" }, { img: "😅", name: "SWEAT SMILE" }, { img: "😂", name: "JOY" }, { img: "😋", name: "YUM" },
+            { img: "😢", name: "CRY" }, { img: "😭", name: "SOB" }, { img: "😓", name: "SWEAT" }, { img: "😰", name: "COLD SWEAT" }, { img: "😨", name: "FEARFUL" },
+            { img: "😱", name: "SCREAM" }, { img: "😡", name: "RAGE" }, { img: "😠", name: "ANGRY" }, { img: "😤", name: "TRIUMPH" }, { img: "😳", name: "FLUSHED" },
+            { img: "😴", name: "SLEEPING" }, { img: "🤓", name: "NERD" }, { img: "😎", name: "SUNGLASSES" }, { img: "😷", name: "MASK" }
+        ];
 
-        uploadZone.onclick = () => fileInput.click();
-        fileInput.onchange = (e) => e.target.files[0] && handleFile(e.target.files[0]);
+        const emotionsData = [
+            { img: "😀", options: ["GRINNING", "SMILE"], correct: 0 },
+            { img: "😄", options: ["SMILE", "SMILEY"], correct: 0 },
+            { img: "😃", options: ["SMILEY", "GRINNING"], correct: 0 },
+            { img: "😬", options: ["GRIMACING", "SMILEY"], correct: 0 },
+            { img: "😁", options: ["GRIN", "GRINNING"], correct: 0 },
+            { img: "😌", options: ["RELIEVED", "RELAXED"], correct: 0 },
+            { img: "😊", options: ["RELAXED", "BLUSH"], correct: 1 },
+            { img: "🙂", options: ["SLIGHTLY SMILE FACE", "WINK"], correct: 0 },
+            { img: "😉", options: ["WINK", "SLIGHTLY SMILE FACE"], correct: 0 },
+            { img: "😇", options: ["INNOCENT", "LAUGHING"], correct: 0 },
+            { img: "😆", options: ["LAUGHING", "JOY"], correct: 0 },
+            { img: "😅", options: ["SWEAT SMILE", "LAUGHING"], correct: 0 },
+            { img: "😂", options: ["JOY", "YUM"], correct: 0 },
+            { img: "😋", options: ["YUM", "WINK"], correct: 0 },
+            { img: "😢", options: ["CRY", "SOB"], correct: 0 },
+            { img: "😭", options: ["SOB", "CRY"], correct: 0 },
+            { img: "😓", options: ["SWEAT", "COLD SWEAT"], correct: 0 },
+            { img: "😰", options: ["COLD SWEAT", "FEARFUL"], correct: 0 },
+            { img: "😨", options: ["FEARFUL", "SCREAM"], correct: 0 },
+            { img: "😱", options: ["SCREAM", "ANGRY"], correct: 0 },
+            { img: "😡", options: ["RAGE", "ANGRY"], correct: 0 },
+            { img: "😠", options: ["ANGRY", "RAGE"], correct: 0 },
+            { img: "😤", options: ["TRIUMPH", "FLUSHED"], correct: 0 },
+            { img: "😳", options: ["FLUSHED", "SCREAM"], correct: 0 },
+            { img: "😴", options: ["SLEEPING", "SLEEPY"], correct: 0 },
+            { img: "🤓", options: ["NERD", "SUNGLASSES"], correct: 0 },
+            { img: "😎", options: ["SUNGLASSES", "NERD"], correct: 0 },
+            { img: "😷", options: ["MASK", "TRIUMPH"], correct: 0 }
+        ];
 
-        function handleFile(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                currentBase64 = e.target.result.split(',')[1];
-                previewImg.src = e.target.result;
-                uploadZone.classList.add('hidden');
-                resultSection.classList.remove('hidden');
-                analysisResults.classList.add('hidden');
-                clearCanvas();
-                previewImg.onload = () => {
-                    canvas.width = previewImg.clientWidth;
-                    canvas.height = previewImg.clientHeight;
-                };
-            };
-            reader.readAsDataURL(file);
+        const detectionObjects = [
+            { icon: "💾", name: "Disk" }, { icon: "📹", name: "Camera" }, { icon: "🔌", name: "Cable" }, 
+            { icon: "🗄️", name: "Server" }, { icon: "📦", name: "Box" }, { icon: "💻", name: "Laptop" },
+            { icon: "⌨️", name: "Keyboard" }, { icon: "🖱️", name: "Mouse" }, { icon: "📱", name: "Phone" }
+        ];
+
+        const curriculumCases = [
+            { case: "Scenario 1: Night Watch", desc: "A security camera at 2:00 AM misses a person because there are no streetlights.", img: "🌑", correct: "Environmental Sensitivity", explanation: "Lighting is a critical factor. Without sufficient light, AI sensors cannot capture enough data to distinguish edges or objects." },
+            { case: "Scenario 2: Factory Speed", desc: "A robotic arm uses CV to sort 5,000 eggs in one hour without getting tired.", img: "🥚", correct: "Increase Automation & Efficiency", explanation: "AI systems don't experience fatigue and can perform repetitive tasks at much higher speeds than human workers." },
+            { case: "Scenario 3: Smart Braking", desc: "A self-driving car detects a child running onto the road and stops instantly.", img: "🚗", correct: "Enhance Safety & Convenience", explanation: "AI can process sensory input and react faster than human reflex time, preventing potential accidents." },
+            { case: "Scenario 4: The 6-Finger Error", desc: "An AI creates a photo of a hand, but it gives the hand 6 fingers by mistake.", img: "🖐️", correct: "Lack of Human Context", explanation: "AI understands pixel patterns but lacks real-world understanding of human anatomy and biology." },
+            { case: "Scenario 5: Face ID", desc: "A smartphone only unlocks when it sees the owner's face, keeping the data safe.", img: "📱", correct: "Secure Personalization", explanation: "Biometric identification allows technology to recognize and serve only its specific user." },
+            { case: "Scenario 6: Sun Glare", desc: "A camera is blinded by a direct beam of sunlight and cannot see the traffic light.", img: "☀️", correct: "Environmental Sensitivity", explanation: "Extreme light changes like overexposure or glare are significant environmental limitations for cameras." },
+            { case: "Scenario 7: Forest Camouflage", desc: "AI misses a green bag sitting on green grass because the colors are too similar.", img: "🌲", correct: "Environmental Sensitivity", explanation: "When target and background colors are too similar (low contrast), AI struggles to define the object boundary." },
+            { case: "Scenario 8: Foggy Road", desc: "A computer cannot detect the car in front because of very thick smoke and fog.", img: "🌫️", correct: "Environmental Sensitivity", explanation: "Adverse weather conditions like fog or heavy rain act as 'noise' that blocks visual data transmission." },
+            { case: "Scenario 9: Smart Shopping", desc: "A supermarket uses AI to track items so customers can pay without waiting in line.", img: "🛒", correct: "Increase Automation & Efficiency", explanation: "Automating the identification of items removes the bottleneck of human-operated checkout lines." },
+            { case: "Scenario 10: Mirror Ghost", desc: "AI sees a reflection in a mirror and thinks there are two people in the room.", img: "🪞", correct: "Lack of Human Context", explanation: "The AI lacks the 'common sense' to understand physical phenomena like reflections, mistaking them for real objects." },
+            { case: "Scenario 11: Shadow Scare", desc: "High-contrast shadows look like a solid wall to the AI, so it stops moving.", img: "👤", correct: "Environmental Sensitivity", explanation: "Shadows change the contrast levels of a scene, often confusing depth-perception sensors." },
+            { case: "Scenario 12: Photo Album", desc: "Your phone automatically groups all photos of 'Your Dog' into a private album for you.", img: "🐶", correct: "Secure Personalization", explanation: "The AI classifies visual data to provide a customized and organized experience for the specific user." },
+            { case: "Scenario 13: Floating Object", desc: "AI generates a picture of a cup, but the cup is floating in the air against gravity.", img: "☕", correct: "Lack of Human Context", explanation: "AI models generate based on probability, not physical laws like gravity or spatial logic." },
+            { case: "Scenario 14: Medical Assistant", desc: "AI scans 1,000 X-ray photos in seconds to find which ones show a broken bone.", img: "🩩", correct: "Increase Automation & Efficiency", explanation: "High-speed processing of medical data allows for faster diagnosis and supports doctors in saving lives." },
+            { case: "Scenario 15: Polka-Dot Wall", desc: "A person in a patterned shirt stands in front of a matching wall and vanishes to the AI.", img: "⚪", correct: "Environmental Sensitivity", explanation: "Visual noise and complex patterns can obscure subjects from computer vision algorithms." },
+            { case: "Scenario 16: Safe Parking", desc: "A car uses cameras to warn the driver about a tiny pole they couldn't see.", img: "🅿️", correct: "Enhance Safety & Convenience", explanation: "AI vision monitors angles and distances that the human eye might miss, aiding in safer vehicle navigation." },
+            { case: "Scenario 17: Neon Night", desc: "Flashing neon signs make the AI think there are dozens of traffic lights everywhere.", img: "🌈", correct: "Environmental Sensitivity", explanation: "Artificial light sources can create false signals that AI incorrectly classifies as relevant environmental data." },
+            { case: "Scenario 18: Merged People", desc: "Two people are hugging, and the AI thinks it is just one person with four arms.", img: "🫂", correct: "Lack of Human Context", explanation: "AI struggles with overlapping objects because it doesn't understand physical human boundaries." },
+            { case: "Scenario 19: 24/7 Monitoring", desc: "AI monitors a high-security server room all weekend without needing a break.", img: "🗄️", correct: "Increase Automation & Efficiency", explanation: "Continuous, non-stop scanning is a key efficiency benefit of using machines over human security." },
+            { case: "Scenario 20: Missing Features", desc: "AI creates a very realistic face but forgets to draw the eyebrows or the nose.", img: "😶", correct: "Lack of Human Context", explanation: "AI 'fills blanks' but can miss essential anatomical details that a human would never forget." }
+        ];
+
+        function updateUI() {
+            const menu = document.getElementById('module-menu');
+            menu.innerHTML = state.modules.map((m, idx) => `
+                <div class="module-card p-3 rounded-2xl flex items-center gap-3 ${state.currentModuleIdx === idx ? 'active' : ''} ${m.locked ? 'locked' : 'cursor-pointer hover:bg-slate-800'}" 
+                     onclick="${!m.locked ? `startModule(${idx})` : ''}">
+                    <span class="text-xl">${m.icon}</span>
+                    <div class="whitespace-nowrap">
+                        <div class="text-[11px] font-black text-white uppercase italic">${m.name}</div>
+                        <div class="text-[9px] text-slate-500 uppercase font-bold">
+                            ${m.completed ? 'SOLVED' : (m.locked ? 'LOCKED' : 'ACTIVE')}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
         }
 
-        resetBtn.onclick = () => {
-            fileInput.value = '';
-            uploadZone.classList.remove('hidden');
-            resultSection.classList.add('hidden');
-            currentBase64 = null;
-            detectionsCache = [];
-        };
+        function startModule(idx) {
+            state.currentModuleIdx = idx;
+            state.isTransitioning = false;
+            showIntro();
+            updateUI();
+        }
 
-        function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+        function showIntro() {
+            const mod = state.modules[state.currentModuleIdx];
+            document.getElementById('intro-title').innerText = mod.name;
+            document.getElementById('intro-icon').innerText = mod.icon;
+            document.getElementById('intro-concept-text').innerText = mod.concept;
+            document.getElementById('intro-instruction-text').innerText = mod.instruction;
+            document.getElementById('intro-modal').classList.remove('hidden');
+        }
 
-        detectBtn.onclick = async () => {
-            if (!currentBase64) return;
-            detectBtn.disabled = true;
-            loading.classList.remove('hidden');
-            analysisResults.classList.add('hidden');
-            clearCanvas();
+        function dismissIntro() {
+            document.getElementById('intro-modal').classList.add('hidden');
+            renderLevel();
+        }
 
-            try {
-                const response = await fetch(config.apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: currentBase64 })
-                });
+        function renderLevel() {
+            const module = state.modules[state.currentModuleIdx];
+            const container = document.getElementById('screen-content');
+            container.innerHTML = ""; 
+            if (module.id === 0) renderRGB(container, module);
+            else if (module.id === 1) renderClassification(container, module);
+            else if (module.id === 2) renderDetection(container, module);
+            else if (module.id === 3) renderLimitations(container, module);
+        }
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Server returned ${response.status}: ${errorText || 'Unknown error'}`);
-                }
-                
-                const data = await response.json();
-                detectionsCache = data;
-                displayDetections(data);
-            } catch (err) {
-                console.error(err);
-                showError(err.message);
-            } finally {
-                detectBtn.disabled = false;
-                loading.classList.add('hidden');
+        function renderRGB(container, module) {
+            if (module.attemptsThisRound >= module.maxRoundAttempts) {
+                if (module.marks < module.target) return showRetryScreen(container);
+                else { handleModuleSuccess(); return; }
             }
-        };
-
-        function displayDetections(detections) {
-            analysisResults.classList.remove('hidden');
-            resultsBody.innerHTML = '';
-            const imgW = previewImg.clientWidth;
-            const imgH = previewImg.clientHeight;
-
-            detections.forEach(item => {
-                const row = document.createElement('tr');
-                row.innerHTML = `<td class="px-4 py-2 font-bold text-blue-600">${item.name}</td><td class="px-4 py-2 text-sm text-slate-600">${item.description}</td>`;
-                resultsBody.appendChild(row);
-
-                if (item.box_2d) {
-                    const [ymin, xmin, ymax, xmax] = item.box_2d;
-                    const left = (xmin / 1000) * imgW, top = (ymin / 1000) * imgH;
-                    const width = ((xmax - xmin) / 1000) * imgW, height = ((ymax - ymin) / 1000) * imgH;
-                    ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 3;
-                    ctx.strokeRect(left, top, width, height);
-                    ctx.fillStyle = '#3b82f6'; ctx.font = 'bold 12px sans-serif';
-                    const labelWidth = ctx.measureText(item.name).width;
-                    ctx.fillRect(left, top - 20, labelWidth + 10, 20);
-                    ctx.fillStyle = 'white'; ctx.fillText(item.name, left + 5, top - 5);
+            state.rgbTries = 0;
+            state.isTransitioning = false;
+            const q = module.attemptsThisRound + 1;
+            let size, noise, diffLabel;
+            
+            if (q <= 50) { size = 6; noise = 90; diffLabel = "Standard Sweep"; } 
+            else { size = 10; noise = 40; diffLabel = "Advanced Sweep"; }
+            
+            const target = [Math.floor(Math.random() * 256), Math.floor(Math.random() * 256), Math.floor(Math.random() * 256)];
+            container.innerHTML = `
+                <div class="w-full flex flex-col items-center">
+                    <div class="flex justify-between w-full mb-6 items-center">
+                        <div class="flex items-center gap-4 bg-slate-800 p-4 rounded-2xl border border-slate-700">
+                            <div class="w-12 h-12 rounded-lg border-2 border-white shadow-md" style="background: rgb(${target[0]},${target[1]},${target[2]})"></div>
+                            <div>
+                                <div class="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Target Signal</div>
+                                <div class="mono text-emerald-400 font-bold">R:${target[0]} G:${target[1]} B:${target[2]}</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                             <div class="text-[10px] uppercase font-bold text-slate-500 mb-1 italic">${diffLabel}: ${q}/100</div>
+                             <div class="text-2xl font-black text-white">${module.marks}/20 Marks</div>
+                             <div id="try-dots" class="flex gap-1 justify-end mt-1"></div>
+                        </div>
+                    </div>
+                    <div id="pixel-grid" class="grid gap-1 bg-slate-950 p-2 rounded-xl shadow-inner border border-slate-800"></div>
+                </div>
+            `;
+            const dots = document.getElementById('try-dots');
+            for(let i=0; i<5; i++) dots.innerHTML += `<div class="try-dot"></div>`;
+            const grid = document.getElementById('pixel-grid');
+            grid.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+            const total = size * size;
+            const targetPos = Math.floor(Math.random() * total);
+            for (let i = 0; i < total; i++) {
+                const cell = document.createElement('div');
+                cell.className = `rounded pixel-cell ${size < 8 ? 'w-12 h-12' : 'w-7 h-7'}`;
+                if (i === targetPos) { cell.style.backgroundColor = `rgb(${target[0]},${target[1]},${target[2]})`; cell.dataset.correct = "true"; }
+                else {
+                    const r = Math.max(0, Math.min(255, target[0] + (Math.random() * noise * 2 - noise)));
+                    const g = Math.max(0, Math.min(255, target[1] + (Math.random() * noise * 2 - noise)));
+                    const b = Math.max(0, Math.min(255, target[2] + (Math.random() * noise * 2 - noise)));
+                    cell.style.backgroundColor = `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`;
                 }
+                cell.onclick = () => handlePixelClick(cell);
+                grid.appendChild(cell);
+            }
+        }
+
+        function handlePixelClick(el) {
+            if (state.isTransitioning) return;
+            const mod = state.modules[0];
+            const correctPixel = document.querySelector('[data-correct="true"]');
+            
+            if (el.dataset.correct === "true") {
+                state.isTransitioning = true;
+                mod.marks++; mod.attemptsThisRound++;
+                el.classList.add('correct-reveal');
+                setTimeout(() => {
+                    if (mod.marks >= 20) handleModuleSuccess(); else renderLevel();
+                }, 1000);
+            } else {
+                state.rgbTries++;
+                const dots = document.querySelectorAll('.try-dot');
+                if (dots[state.rgbTries-1]) dots[state.rgbTries-1].classList.add('used');
+                el.style.opacity = "0.1"; el.style.pointerEvents = "none";
+                
+                if (state.rgbTries >= 5) { 
+                    state.isTransitioning = true;
+                    correctPixel.classList.add('correct-reveal');
+                    mod.attemptsThisRound++;
+                    setTimeout(() => renderLevel(), 1500);
+                }
+            }
+        }
+
+        function renderClassification(container, module) {
+            if (module.currentLevel >= module.totalLevels) {
+                if (module.marks >= 20) { handleModuleSuccess(); return; }
+                else showAlert("MISSION FAILED", "Required marks not achieved (20 needed). Scanner rebooting.", "⚠️", "RETRY", () => { module.currentLevel = 0; module.marks = 0; renderLevel(); });
+                return;
+            }
+
+            const item = emotionsData[module.currentLevel % emotionsData.length];
+            let blurAmount = 0;
+            if (module.currentLevel >= 20) blurAmount = 15;
+            else if (module.currentLevel >= 10) blurAmount = 6;
+            
+            container.innerHTML = `
+                <div class="w-full max-w-4xl flex flex-col items-center">
+                    <div class="text-center w-full max-w-lg mb-6">
+                        <div class="flex justify-between items-center mb-6">
+                            <div class="text-emerald-500 font-bold uppercase text-[10px] tracking-widest">Feed Quality: ${blurAmount > 0 ? (blurAmount > 10 ? 'POOR' : 'UNCERTAIN') : 'CLEAR'}</div>
+                            <div class="text-white font-bold">Progress: ${module.currentLevel + 1}/50 | Marks: ${module.marks}/20</div>
+                        </div>
+                        <h2 class="text-2xl font-bold mb-4 italic uppercase tracking-tight">Interrogate Suspect:</h2>
+                        <div class="bg-slate-950 p-12 rounded-[2rem] border-2 border-slate-800 mb-6 flex items-center justify-center noise-overlay overflow-hidden relative shadow-inner">
+                            <div class="text-[100px] transition-all duration-500" style="filter: blur(${blurAmount}px)">
+                                ${item.img}
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            ${item.options.map((opt, i) => {
+                                const isCorrect = (i === item.correct);
+                                return `<button onclick="handleClassifyClick(${isCorrect}, '${item.options[item.correct]}')" class="bg-slate-800 border-2 border-slate-700 p-5 rounded-2xl font-bold hover:border-emerald-500 hover:scale-105 transition-all text-lg shadow-lg">${opt}</button>`;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <div class="w-full bg-slate-950/50 rounded-3xl border border-slate-800 p-6 shadow-inner">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-emerald-400 font-black italic uppercase text-sm tracking-widest">Emoticon Database Library</h3>
+                        </div>
+                        <div class="h-64 library-scroll grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 p-2">
+                            ${chartData.map(c => `
+                                <div class="bg-slate-900 border border-slate-800 p-3 rounded-xl flex flex-col items-center text-center shadow-sm">
+                                    <span class="text-2xl mb-1">${c.img}</span>
+                                    <span class="text-[8px] font-bold text-slate-400 leading-tight uppercase tracking-tighter">${c.name}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleClassifyClick(correct, correctName) {
+            const mod = state.modules[1];
+            const feedbackText = correct ? "Analysis confirmed." : `Error: Suspect expression was ${correctName}.`;
+            const feedbackIcon = correct ? "✅" : "❌";
+            
+            if (correct) mod.marks++;
+            mod.currentLevel++;
+            
+            showAlert(correct ? "ACCURATE" : "ERROR", feedbackText, feedbackIcon, "PROCEED", () => {
+                if (mod.marks >= 20) handleModuleSuccess(); else renderLevel();
             });
         }
 
-        function showError(msg) {
-            errorMessage.innerText = msg;
-            errorToast.classList.remove('translate-y-32');
-            setTimeout(() => errorToast.classList.add('translate-y-32'), 8000);
+        function renderDetection(container, module) {
+            if (module.currentLevel >= module.totalLevels) {
+                if (module.marks >= 20) { handleModuleSuccess(); return; }
+                else showAlert("MISSION FAILED", "Required evidence not secured (20 needed).", "⚠️", "RETRY", () => { module.currentLevel = 0; module.marks = 0; renderLevel(); });
+                return;
+            }
+
+            const targetsPerRound = module.currentLevel < 10 ? 3 : (module.currentLevel < 20 ? 5 : 6);
+            state.detectionSubCount = 0;
+            state.detectionRoundFailed = false;
+            
+            container.innerHTML = `
+                <div class="text-center w-full">
+                    <div class="flex justify-between items-center mb-4">
+                         <div class="text-white font-bold">Round: ${module.currentLevel + 1}/50</div>
+                         <div class="text-emerald-400 font-bold">Evidence Secured: ${module.marks}/20</div>
+                    </div>
+                    <h2 class="text-2xl font-bold mb-2 italic uppercase tracking-tighter">Locate ${targetsPerRound} Signal Sources</h2>
+                    <div class="mb-4 bg-slate-800/50 p-4 rounded-xl inline-block border border-slate-700">
+                        <span class="text-slate-400 text-[10px] uppercase font-bold mr-2">Word List:</span>
+                        <div class="flex gap-2 flex-wrap justify-center mt-1">
+                            ${detectionObjects.map(w => `<span class="bg-slate-900 px-3 py-1 rounded-md text-emerald-400 font-bold border border-slate-700 text-xs">${w.name}</span>`).join('')}
+                        </div>
+                    </div>
+                    <div id="detection-arena" class="bg-slate-950 border-2 border-slate-800 rounded-[3rem] h-[380px] relative overflow-hidden shadow-inner">
+                         <div class="absolute top-4 right-6 text-[10px] text-slate-600 font-bold uppercase tracking-widest">Unsecured Signals: <span id="sub-target-count">${targetsPerRound}</span></div>
+                    </div>
+                </div>
+            `;
+            const arena = document.getElementById('detection-arena');
+
+            for(let i=0; i<targetsPerRound; i++) {
+                const target = detectionObjects[Math.floor(Math.random() * detectionObjects.length)];
+                const el = document.createElement('div');
+                el.className = "absolute p-4 cursor-pointer border-2 border-dashed border-transparent hover:border-emerald-500 rounded-2xl transition-all";
+                el.style.left = Math.random() * 85 + 5 + "%";
+                el.style.top = Math.random() * 70 + 15 + "%";
+                el.innerHTML = `<span class="text-4xl">${target.icon}</span>`;
+                
+                el.onclick = () => {
+                    if (state.detectionRoundFailed) return;
+                    state.detectionAttempts = 3;
+                    openLabelModal(target.name, (isCorrect) => {
+                        if (isCorrect) {
+                            el.className = "absolute p-4 border-2 border-emerald-500 bg-emerald-500/20 rounded-2xl pointer-events-none";
+                            el.innerHTML += `<div class="absolute -top-6 left-0 text-[10px] bg-emerald-500 text-slate-950 px-2 font-bold uppercase tracking-tighter">${target.name} [0.99]</div>`;
+                            handleDetectionFeedback(true, target.name, targetsPerRound, module);
+                        } else {
+                            state.detectionAttempts--;
+                            if (state.detectionAttempts <= 0) {
+                                 document.getElementById('label-modal').classList.add('hidden');
+                                 state.detectionRoundFailed = true;
+                                 handleDetectionFeedback(false, target.name, targetsPerRound, module);
+                            } else { updateLabelModalUI(); }
+                        }
+                    });
+                };
+                arena.appendChild(el);
+            }
         }
 
-        window.addEventListener('resize', () => {
-            if (previewImg.src) {
-                canvas.width = previewImg.clientWidth;
-                canvas.height = previewImg.clientHeight;
-                if (detectionsCache.length) displayDetections(detectionsCache);
+        function handleDetectionFeedback(correct, correctName, totalTargets, module) {
+            if (!correct) {
+                showAlert("SECURITY LOCKOUT", `Label failed. Round terminated. The correct label was ${correctName}.`, "❌", "NEXT CASE", () => {
+                    module.currentLevel++;
+                    renderLevel();
+                });
+                return;
             }
-        });
+
+            state.detectionSubCount++;
+            document.getElementById('sub-target-count').innerText = totalTargets - state.detectionSubCount;
+            
+            if (state.detectionSubCount >= totalTargets) {
+                module.marks++;
+                module.currentLevel++;
+                showAlert("AREA SECURED", "All labels verified. Security mark awarded.", "🎯", "CONTINUE", () => {
+                    if (module.marks >= 20) handleModuleSuccess(); else renderLevel();
+                });
+            }
+        }
+
+        function openLabelModal(targetName, callback) {
+            const modal = document.getElementById('label-modal');
+            const input = document.getElementById('label-input');
+            const btn = document.getElementById('label-submit-btn');
+            modal.classList.remove('hidden'); input.value = ""; input.focus();
+            updateLabelModalUI();
+            btn.onclick = () => {
+                const val = input.value.trim();
+                const isCorrect = val.toLowerCase() === targetName.toLowerCase();
+                if (isCorrect) modal.classList.add('hidden');
+                callback(isCorrect);
+            };
+            input.onkeypress = (e) => { if (e.key === 'Enter') btn.onclick(); };
+        }
+
+        function updateLabelModalUI() {
+            document.getElementById('label-tries-display').innerText = `Attempts Remaining: ${state.detectionAttempts}`;
+        }
+
+        function renderLimitations(container, module) {
+            if (module.currentLevel >= module.totalLevels) {
+                if (module.marks >= 10) { handleModuleSuccess(); return; }
+                else showAlert("FAIL", "Analysis incomplete. Required: 10 marks.", "⚠️", "RE-TRY", () => { module.currentLevel = 0; module.marks = 0; renderLevel(); });
+                return;
+            }
+
+            state.limitationsAnswered = false;
+            const lv = curriculumCases[module.currentLevel];
+            let displayOptions = [];
+            if (module.currentLevel < 10) {
+                displayOptions = [lv.correct];
+                while(displayOptions.length < 3) {
+                    let rand = allPotentialLimits[Math.floor(Math.random() * allPotentialLimits.length)];
+                    if(!displayOptions.includes(rand)) displayOptions.push(rand);
+                }
+                displayOptions.sort(() => Math.random() - 0.5);
+            } else {
+                displayOptions = allPotentialLimits;
+            }
+
+            container.innerHTML = `
+                <div class="text-center w-full max-w-4xl">
+                    <div class="flex justify-between items-center mb-4">
+                         <div class="text-emerald-500 font-bold uppercase text-xs tracking-widest">Forensic Case ${module.currentLevel + 1}/20</div>
+                         <div class="text-white font-bold">Solved: ${module.marks}/10</div>
+                    </div>
+                    <h2 class="text-3xl font-black mb-4 text-white italic">${lv.case}</h2>
+                    <div class="text-left bg-slate-800/50 p-8 rounded-2xl border border-slate-700 mb-6 shadow-inner">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase mb-3 tracking-widest">Scenario:</h4>
+                        <p class="text-slate-100 text-2xl mb-6 leading-relaxed font-medium">${lv.desc}</p>
+                        <div class="h-px bg-slate-700 w-full mb-6"></div>
+                        <h4 class="text-emerald-400 font-black text-xl italic uppercase tracking-tight">Which of the following categories best describes this scenario?</h4>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8" id="choices-grid">
+                        ${displayOptions.map((opt) => `
+                            <button onclick="handleLimitChoice(this, '${opt}')" 
+                                    class="choice-btn bg-slate-800 border-2 border-slate-700 p-6 rounded-xl font-bold hover:border-slate-500 transition-all uppercase tracking-widest text-xl italic">
+                                ${opt}
+                            </button>`).join('')}
+                    </div>
+
+                    <div id="explanation-container" class="hidden text-left bg-slate-950/80 p-8 rounded-2xl border-2 border-slate-800 animate-fade-in">
+                        <h4 id="explanation-status" class="text-2xl font-black uppercase mb-3 italic"></h4>
+                        <p id="explanation-text" class="text-slate-200 text-xl mb-8 leading-relaxed italic"></p>
+                        <button onclick="proceedToNextLimit()" class="w-full bg-emerald-500 text-slate-950 font-black py-5 rounded-xl text-2xl uppercase tracking-widest active-pulse shadow-lg">Next Question</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleLimitChoice(btn, chosen) {
+            if (state.limitationsAnswered) return;
+            state.limitationsAnswered = true;
+            
+            const mod = state.modules[3];
+            const lv = curriculumCases[mod.currentLevel];
+            const isCorrect = (chosen === lv.correct);
+            
+            if (isCorrect) mod.marks++;
+            
+            // UI Feedback
+            const allBtns = document.querySelectorAll('.choice-btn');
+            allBtns.forEach(b => {
+                if (b.innerText.trim() === lv.correct.toUpperCase()) b.classList.add('correct-choice');
+                else b.classList.add('wrong-choice');
+            });
+
+            const expContainer = document.getElementById('explanation-container');
+            const expStatus = document.getElementById('explanation-status');
+            const expText = document.getElementById('explanation-text');
+
+            expContainer.classList.remove('hidden');
+            expStatus.innerText = isCorrect ? "CORRECT! Analysis Accurate" : "WRONG! Analysis Mismatch";
+            expStatus.className = isCorrect ? "text-emerald-400 text-xl font-black uppercase mb-2 italic" : "text-rose-500 text-xl font-black uppercase mb-2 italic";
+            expText.innerText = lv.explanation;
+        }
+
+        function proceedToNextLimit() {
+            const mod = state.modules[3];
+            mod.currentLevel++;
+            if (mod.marks >= 10) {
+                handleModuleSuccess();
+            } else if (mod.currentLevel >= mod.totalLevels) {
+                showAlert("FAIL", `Only ${mod.marks}/20 solved. You need 10 marks to pass.`, "⚠️", "RESTART", () => { mod.currentLevel = 0; mod.marks = 0; renderLevel(); });
+            } else {
+                renderLevel();
+            }
+        }
+
+        function handleModuleSuccess() {
+            const mod = state.modules[state.currentModuleIdx];
+            mod.completed = true;
+            const next = state.modules[state.currentModuleIdx + 1];
+            
+            if (next) {
+                next.locked = false;
+                showAlert("MISSION COMPLETE", "Clue found! Go to the next mission to find more clues.", "🔓", "PROCEED", () => startModule(state.currentModuleIdx + 1));
+            } else {
+                showVictory();
+            }
+            updateUI();
+        }
+
+        function showAlert(title, text, icon, btnText, callback) {
+            const overlay = document.getElementById('msg-overlay');
+            document.getElementById('msg-title').innerText = title;
+            document.getElementById('msg-text').innerText = text;
+            document.getElementById('msg-icon').innerText = icon;
+            document.getElementById('msg-btn').innerText = btnText;
+            overlay.classList.remove('hidden');
+            document.getElementById('msg-btn').onclick = () => { overlay.classList.add('hidden'); if (callback) callback(); };
+        }
+
+        function showVictory() {
+            document.getElementById('screen-content').innerHTML = `
+                <div class="text-center space-y-8 mt-10 animate-pulse">
+                    <div class="text-9xl">🕵️‍♂️🏆</div>
+                    <h2 class="text-6xl font-black text-emerald-400 italic">SYSTEM SECURED</h2>
+                    <p class="text-slate-300 text-2xl max-w-lg mx-auto leading-relaxed font-bold">Master Detective, you have completed all training modules. The network is safe and the curriculum is mastered. Case Closed!</p>
+                    <button onclick="location.reload()" class="bg-emerald-500 text-slate-950 font-black px-16 py-6 rounded-[2rem] hover:scale-110 active-pulse uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/20 text-xl">NEW CASE</button>
+                </div>`;
+        }
+
+        function showRetryScreen(container) {
+            container.innerHTML = `<div class="text-center"><div class="text-8xl mb-4">⚠️</div><h2 class="text-4xl font-black text-rose-500 mb-8 uppercase italic">Signal Failure</h2><button onclick="state.modules[0].marks=0;state.modules[0].attemptsThisRound=0;renderLevel()" class="bg-white text-slate-950 px-10 py-4 rounded-xl font-black active-pulse shadow-lg text-lg">REBOOT SCANNER</button></div>`;
+        }
+
+        function showAdminPrompt() { document.getElementById('admin-overlay').classList.remove('hidden'); document.getElementById('admin-pass').focus(); }
+        function closeAdmin() { document.getElementById('admin-overlay').classList.add('hidden'); document.getElementById('admin-pass').value = ''; }
+        
+        function checkAdmin() {
+            const p = document.getElementById('admin-pass').value;
+            if (p === "LaaamLaaam~~") {
+                state.modules.forEach(m => {
+                    m.locked = false;
+                    if (m.id === 3) { m.marks = 0; m.completed = false; m.currentLevel = 0; } 
+                    else { m.marks = m.target || 20; m.completed = true; }
+                });
+                showAlert("SUPER ADMIN", "ALL ZONES UNLOCKED. MODULE 4 READY.", "🔓", "DISMISS", () => { closeAdmin(); updateUI(); startModule(3); });
+            } else if (p === "Laaaaaam~") {
+                const nextLocked = state.modules.find(m => m.locked);
+                if (nextLocked) {
+                    nextLocked.locked = false;
+                    const prev = state.modules.find(m => m.id === nextLocked.id - 1);
+                    if (prev) { prev.marks = prev.target || 20; prev.completed = true; }
+                    showAlert("ADMIN", `Bypassing to ${nextLocked.name}`, "🔑", "OK", () => { closeAdmin(); updateUI(); startModule(nextLocked.id); });
+                } else { closeAdmin(); }
+            }
+        }
+
+        setInterval(() => {
+            const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+            const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const s = (elapsed % 60).toString().padStart(2, '0');
+            document.getElementById('timer').innerText = `${m}:${s}`;
+        }, 1000);
+
+        window.onload = () => { startModule(0); };
     </script>
+
+    <footer class="p-6 text-center text-slate-600 text-[10px] uppercase tracking-[0.3em] font-bold">
+        HK Form 1 Computer Studies // AI Forensic Lab V22.0 // FINAL RELEASE
+    </footer>
 </body>
 </html>
